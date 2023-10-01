@@ -34,9 +34,7 @@ def get_comic(comic_num):
     return image, comment, name, comic_num
 
 
-def upload_to_server(token, group_id, version, file_name):
-    photo_upload_url = get_upload_url(token, group_id, version)
-
+def upload_to_server(file_name, photo_upload_url):
     with open(file_name, 'rb') as file:
         files = {
             'photo': file,
@@ -61,8 +59,7 @@ def get_upload_url(token, group_id, version):
     return photo_upload_url
 
 
-def save_to_wall(token, group_id, version, file_name):
-    server, response_hash, photo = upload_to_server(token, group_id, version, file_name)
+def save_to_wall(token, group_id, version, server, response_hash, photo):
     url = "https://api.vk.com/method/photos.saveWallPhoto"
     params = {"access_token": token, 'photo': photo, 'v': version, 'group_id': group_id, 'server': server,
               'hash': response_hash}
@@ -73,11 +70,8 @@ def save_to_wall(token, group_id, version, file_name):
     return answer
 
 
-def publish_to_group(token, group_id, version, file_name, comment, comic_num):
+def publish_to_group(token, group_id, version, comment, comic_num, owner_id, media_id):
     url = "https://api.vk.com/method/wall.post"
-    save_info_photo = save_to_wall(token, group_id, version, file_name)
-    owner_id = save_info_photo["response"][0]["owner_id"]
-    media_id = save_info_photo["response"][0]["id"]
     attachments = f'photo{owner_id}_{media_id}'
     params = {"access_token": token, 'attachments': attachments, 'v': version, 'owner_id': -int(group_id),
               'message': comment, 'from_group': '1'}
@@ -113,10 +107,17 @@ def main():
     vk_group_id = os.environ['VK_GROUP_ID']
     vk_token = os.environ['VK_TOKEN']
     try:
-        img_url, comment, title, comic_num = get_random_comic()
+        img_url, author_comment, title, comic_num = get_random_comic()
         comic_filepath = download_image(title, img_url)
-        publish_to_group(vk_token, vk_group_id, version, comic_filepath, comment, comic_num)
-        print('добавлен комикс', comic_num, 'в группу', vk_group_id)
+        photo_upload_url = get_upload_url(vk_token, vk_group_id, version)
+        server, response_hash, photo = upload_to_server(comic_filepath, photo_upload_url)
+        answer = save_to_wall(vk_token, vk_group_id, version, server, response_hash, photo)
+        owner_id = answer["response"][0]["owner_id"]
+        media_id = answer["response"][0]["id"]
+        publish_to_group(vk_token, vk_group_id, version, author_comment, comic_num, owner_id, media_id)
+        download_notification = f"Комикс №{comic_num} загружен в группу {vk_group_id}"
+        print(download_notification)
+
     finally:
         os.remove(comic_filepath)
 
